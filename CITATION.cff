@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "rSTEMMUS_SCOPE: Octave/MCR multi-engine support"
+authors:
+  - family-names: Shirzad
+    given-names: Arman
+  - family-names: Aljoumani
+    given-names: Basem
+repository-code: "https://github.com/BasemAljoumani/rSTEMMUS_SCOPE"
+url: "https://github.com/BasemAljoumani/rSTEMMUS_SCOPE"
+license: GPL-3.0
+version: "1.0.0-octave"
+date-released: "2026-09-17"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.22816340"
+    description: "Archived software release (v1.0.0-octave)"
+references:
+  - type: software
+    title: "rSTEMMUS_SCOPE"
+    authors:
+      - family-names: Aljoumani
+        given-names: Basem
+      - family-names: Duarte Rocha
+        given-names: Alby
+    repository-code: "https://github.com/EcoExtreML/rSTEMMUS_SCOPE"
+    notes: "Original R interface, forked and extended with GNU Octave/MCR support in this repository."
+  - type: article
+    title: "STEMMUS-SCOPE v1.0.0: a coupled soil-plant-atmosphere and radiative transfer model for simulating water and energy exchanges"
+    authors:
+      - family-names: Wang
+        given-names: Yijian
+      - family-names: Zeng
+        given-names: Yijian
+    notes: "Underlying STEMMUS-SCOPE coupled model that this software provides an R interface to."
