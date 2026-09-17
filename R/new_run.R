@@ -104,14 +104,6 @@ new_run <- function(
                      site_name, "_", run_name,"_", "config.txt"),
                      quote = FALSE, col.names = FALSE, row.names = FALSE)
 
-  # create MATLAB path to find the new input directory ----
-  CFG = paste0(patch, "runs/", site_name, "_", run_name, "/", site_name,"_", run_name, "_", "config.txt")
-
-  # write the one line text file into the run directory ----
-  #(it will be overwrite every time the input folder or run_STEMMUS_SCOPE is run)
-  utils::write.table(CFG, file = paste0(patch, "runs/", "path.txt"),
-              sep = " ", col.names = F, row.names = F, quote = F, eol = "", append=F)
-
   return(print(paste0("The input folder ", site_name, "_", run_name, " was created in the folder runs.")  ))
 }
 

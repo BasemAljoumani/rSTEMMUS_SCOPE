@@ -372,8 +372,6 @@ change_STEMMUS_ModelSettings <- function(
     "end"
   )
 
-  utils::write.table(Settings, paste0(patch, "src/+io/getModelSettings.m"),
-              row.names = F, col.names = F, quote = FALSE, sep = "   ")
   utils::write.table(Settings, paste0(patch, "runs/", site_name, "_", run_name, "/", "getModelSettings.m"),
                      row.names = F, col.names = F, quote = FALSE, sep = "   ")
 
@@ -448,8 +446,6 @@ Soil_Constants <- c(
   "",
   "end")
 
-utils::write.table(Soil_Constants, paste0(patch, "src/+io/getSoilConstants.m"),
-            row.names = F, col.names = F, quote = FALSE, sep = "   ")
 utils::write.table(Soil_Constants, paste0(patch, "runs/", site_name, "_", run_name, "/", "getSoilConstants.m"),
                    row.names = F, col.names = F, quote = FALSE, sep = "   ")
 
@@ -581,8 +577,6 @@ def_constants <- c(
   "end"
 )
 
-utils::write.table(def_constants, paste0(patch, "src/+io/define_constants.m"),
-            row.names = F, col.names = F, quote = FALSE, sep = "   ")
 utils::write.table(def_constants, paste0(patch, "runs/", site_name, "_", run_name, "/", "define_constants.m"),
                    row.names = F, col.names = F, quote = FALSE, sep = "   ")
 

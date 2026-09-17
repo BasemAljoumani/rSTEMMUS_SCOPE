@@ -13,12 +13,92 @@ You may need to install the rhdf5 package before using BiocManager, as shown bel
 install.packages("BiocManager")
 BiocManager::install("rhdf5")
 ```
-------------------------------------------------------------------------
+
+### 🚀 Quick Start: Standard Roadmap Template
+
+The most efficient way to set up a new simulation is using our **Standard Roadmap Template**. It is machine-agnostic, handles unit conversions (e.g., Celsius to Kelvin), and supports high-performance parallel execution out-of-the-box.
+
+> **Template Path:** [`2026Contributions/scripts/runs/standardRoadmapLocation.R`](./2026Contributions/scripts/runs/standardRoadmapLocation.R)
+>
+> 1.  **Copy** the template and rename it (e.g., `roadmap_MySite.R`).
+> 2.  **Edit [SECTION 2]** with your site metadata and weather data path.
+> 3.  **Run** the script to automatically generate inputs and launch the model.
+
+---
 #### Model Documentation
 
 The documentation of the STEMMUS_SCOPE model can be found [here](https://ecoextreml.github.io/STEMMUS_SCOPE).
 
-MATLAB R2015b or superior is required to run STEMMUS_SCOPE, and the MATLAB codes need to be downloaded and unzipped using the function ```initial_setup()```.
+STEMMUS_SCOPE supports three execution engines (pick one — set via `exe_method` in `run_inMATLAB()`):
+
+| Engine | `exe_method` | License | Required version | Notes |
+|:--|:--|:--|:--|:--|
+| **MATLAB** | `"matlab"` (default) | Commercial | R2021a+ (uses the `-batch` flag) | Fastest on Windows |
+| **GNU Octave** | `"octave"` | Free (GPL) | 8.0+ — tested on 11.1.0 with `io` + `statistics` packages | Cross-platform; on Windows the bundled `tar.exe` is used to parse xlsx (no system `unzip` needed) |
+| **MATLAB Runtime** | `"mcr"` | Free, redistributable | Runtime pinned per release (current build: R2024a Runtime, ~3 GB from MathWorks) | Needs a precompiled `STEMMUS_SCOPE_exe` binary — download from project releases or build once with [src/compile_stemmus_scope.m](rSTEMMUS_SCOPE/src/compile_stemmus_scope.m) |
+
+The MATLAB code is downloaded and unzipped on first run via ```initial_setup()```.
+
+#### First-run troubleshooting
+
+- **R can't find Octave / MATLAB / MCR**: [run_inMATLAB.R](R/run_inMATLAB.R) searches `C:\Program Files\GNU Octave\*`, `C:\Program Files\MATLAB\R*`, and `C:\Program Files\MATLAB\MATLAB Runtime\v*` on Windows (and `/Applications`, `/usr/local/MATLAB`, `/opt/MATLAB` on Unix). If your install is elsewhere, prepend its `bin/` to `PATH` before `Rscript`, or set `STEMMUS_SCOPE_EXE` to the compiled binary path.
+- **Octave fails with `error: xlsopen ... unzip`**: Octave's `io` package shells out to `unzip` to read xlsx. On Windows installs without `unzip` on PATH, [src/+io/readXlsxNative.m](rSTEMMUS_SCOPE/src/+io/readXlsxNative.m) is used as a fallback (via the bundled `tar.exe`) — no action needed. If you also want `xlsread` itself to work, drop Info-ZIP `unzip.exe` into any PATH folder.
+- **Background launches hang at timestep 0**: a known Windows quirk — if Rscript is launched without a console, the child engine deadlocks writing to a closed stdout. The wrapper now redirects engine output to `runs/SITE_RUN/engine_stdout.log` / `engine_stderr.log`; if you maintain a fork, mirror that redirection.
+- **Soil temperatures or SMC look physically impossible (e.g. −267 °C, 25 m³/m³)**: confirm you converted °C → K (`+273.15`) for `initial_soil_temperature` and `% → fraction` (`/100`) for `initial_volumetric_soil_water` before passing them to `input_constants()`. The roadmap template already does this.
+
+**Recent Key Features & Functional Changes:**
+
+1. **`R/run_inMATLAB.R` Updates:**
+   Dropped hardcoded CPU core limits and added cross-platform smart path detection + an Octave execution fallback.
+   ```R
+   if (octave) {
+     cmd <- sprintf("cd '%s' && octave --no-gui --silent --eval 'STEMMUS_SCOPE; exit'", src_dir)
+   } else {
+     # MATLAB Exec (Auto-detecting Path for Windows/Mac/Linux)
+     if (.Platform$OS.type == "unix") {
+       mac_apps <- list.files("/Applications", pattern = "^MATLAB_R", full.names = TRUE)
+     ...
+   ```
+
+2. **`rSTEMMUS_SCOPE/src/STEMMUS_SCOPE.m` (New):**
+   838 new lines of MATLAB code were added to serve as the unified root execution script.
+   ```matlab
+   % Create execution paths dynamically
+   d1 = pwd;
+   % adding path of STEMMUS_SCOPE model: default dir=src
+   addpath(d1)
+   ...
+   t_cpu = cputime;
+   StartInit
+   [Simu_Step] = Initial_root_biomass(Simu_Step);
+   ```
+
+3. **`run_simulation_background.sh` (New):**
+   A background shell scripting tool was added to securely run simulations using `nohup`.
+   ```bash
+   # Run the simulation in the background using nohup
+   nohup Rscript -e "
+     source('R/run_inMATLAB.R')
+     run_inMATLAB(patch = '${PATCH_DIR}', cores = ${CORES}, octave = ${OCTAVE})
+   " > "$LOG_FILE" 2>&1 &
+   ```
+
+4. **`recover_csv.m` (New):**
+   A standalone MATLAB script to rescue or process simulated variable outputs into clean CSV formats without failing the model trace.
+   ```matlab
+   function recover_csv(directory_path)
+   ...
+       vars_to_extract = {
+           'Sim_Theta',... % soil moisture profile
+           'Sim_TempE',... % soil temperature profile
+           'Sim_Trns', ... % Transpiration (W m-2)
+   ...
+       for i = 1:length(vars_to_extract)
+           var_name = vars_to_extract{i};
+           file_path = fullfile(run_dir, [var_name, '.mat']);
+   ...
+           csvwrite(csv_path, var_data);
+   ```
 
 **directory structure**
 
@@ -52,10 +132,10 @@ run_inMATLAB(patch = "D:/model/rSTEMMUS_SCOPE/",
 note: change the patch according to the ```initial_setup()``` choice and include the patch in MATLAB ```"D:/model/rSTEMMUS_SCOPE/src/"```
              
 ------------------------------------------------------------------------
-#### Steps to run the model for a time series at a specific location
-
 After collecting and organising the data required to run the model (see input variables below), there will be four steps (functions) to run a time series simulation for a specific location.
 [see here the steps](https://github.com/EcoExtreML/rSTEMMUS_SCOPE/blob/master/run_steps.md)
+
+> For a complete, automated recipe (including parallel setup), see the [Standard Roadmap Template](./2026Contributions/scripts/runs/standardRoadmapLocation.R).
 
 ------------------------------------------------------------------------
 
@@ -198,3 +278,111 @@ Soil_property_loc1 <- get_SoilProperties(patch = "D:/model/rSTEMMUS_SCOPE/input/
 ------------------------------------------------------------------------
 #### 1.5 Constants and model settings
 Use functions of the family "info", "check" and "change" to get more information about which constant (model parameters) and model settings from STEMMUS and SCOPE can be changed to calibrate the model for the site characteristics.
+
+---
+
+## 🧭 Simulation Run Catalog
+
+All simulation runs executed during the 2026 development cycle for the Steglitz (DE-STG) site.
+
+<details>
+<summary><b>All Runs & Validation Results (Click to Expand)</b></summary>
+
+<br>
+
+#### Complete Run History (16 runs)
+
+| # | Run Name | Engine | Period | Timesteps | Key Result | Date |
+|:--|:---------|:-------|:-------|:----------|:-----------|:-----|
+| 1 | `Parallel_LAI_1–5` (5 runs) | Octave | 1 day each | 24 each | ✅ 4.7× speedup, zero conflicts | 2026-03-06 |
+| 2 | `Test_FIXED_6mo_OCTAVE_2026Feb11` | Octave | Jan–Jun 2019 | 4,344 | 92% recovered after SIGHUP crash, r=0.325 (early, pre-fix) | 2026-02-11 |
+| 3 | `Test_FIXED_TempSMC_3d_Zerorain_OCTAVE_2026Feb24` | Octave | Jan 1–3, 2019 | 72 | Rain=0 produces same wet bias → drainage bug isolated | 2026-02-24 |
+| 4 | `7Day_SoilEvap_Test_2026Mar` | Octave | 7 days | 168 | Soil evaporation diagnostic | 2026-03 |
+| 5 | `Test_FIXED_Final_6mo_OCTAVE_2026Mar13` | Octave | Jan–Jun 2019 | 4,344 | Final 6mo after all fixes, r=0.901 (Octave vs MATLAB) | 2026-03-13 |
+| 6 | `Test_FIXED_Final_2yr_OCTAVE_2026Apr07` | Octave | 2019–2020 | 17,544 (part 1) | First 2yr Octave attempt | 2026-04-07 |
+| 7 | `Test_FIXED_Final_2yr_OCTAVE_part2_2026Apr08` | Octave | 2019–2020 | 17,544 (part 2) | Stitched continuation of run #6 | 2026-04-08 |
+| 8 | `2yr_continuous_final_2026Apr11` | Octave | 2019–2020 | 17,544 | Full continuous 2yr, 8.3 hours | 2026-04-11 |
+| 9 | `2yr_continuous_final_MATLAB_2026Apr16` | MATLAB | 2019–2020 | 17,544 | Continuous 2yr MATLAB, 34.5 hours (no soil props → r=0.145) | 2026-04-16 |
+| 10 | `2yr_final_soilprops_OCTAVE_2026Apr20` | Octave | 2019–2020 | 17,544 | **Definitive Octave run** with soil properties, r=0.832 at 60cm | 2026-04-20 |
+| 11 | `2yr_final_soilprops_MATLAB_2026Apr21` | MATLAB | 2019–2020 | 17,544 | Intermediate MATLAB run with soil props | 2026-04-21 |
+| 12 | `2yr_final_soilprops_MATLAB_2026Apr22` | MATLAB | 2019–2020 | 17,544 | **Definitive MATLAB run**, r=0.857 at 60cm, 73 min | 2026-04-22 |
+| 13 | `theta_r_guard_test_MATLAB_2026May10` | MATLAB | Jan 1–3, 2019 | 72 | ✅ theta_r floor guard smoke test passed | 2026-05-10 |
+
+---
+
+#### 📍 Definitive Validation Results (Runs #10 and #12)
+
+The definitive 2yr simulations with DE-STG Van Genuchten soil properties:
+
+**MATLAB vs Observations (by depth):**
+
+| Depth | r | KGE | RMSE (m³/m³) | Bias (m³/m³) |
+|:------|:--|:----|:-------------|:-------------|
+| 10 cm | 0.577 | -0.355 | 0.113 | +0.094 |
+| 20 cm | 0.663 | -2.401 | 0.127 | +0.116 |
+| 30 cm | 0.636 | -1.200 | 0.105 | +0.089 |
+| **60 cm** | **0.857** | **0.718** | **0.060** | **-0.049** |
+
+**Engine Parity (MATLAB vs Octave) — ✅ PASS at all depths:**
+
+| Depth | r | RMSE | Bias |
+|:------|:--|:-----|:-----|
+| 10 cm | 0.851 | 0.044 | +0.001 |
+| 20 cm | 0.843 | 0.040 | -0.000 |
+| 30 cm | 0.841 | 0.041 | -0.002 |
+| 60 cm | 0.830 | 0.042 | -0.004 |
+
+> **Validation Plots:** [`2026Contributions/validation_plots_multidepth/`](./2026Contributions/validation_plots_multidepth/)
+
+---
+
+### High-Performance Parallelization Benchmark
+
+To validate the multi-core architectural overhaul, a **5-core Parallel Smoke Test** was executed on 2026-03-06. The test successfully ran 5 concurrent 1-day simulations (24 timesteps each) with independent Leaf Area Index (LAI) multipliers for each process.
+
+> **Test Script:** [`2026Contributions/scripts/utils/test_parallel.R`](./2026Contributions/scripts/utils/test_parallel.R)
+> **Hardware:** Apple M4 (10-core CPU)
+
+| Metric | Serial Execution (Old) | Parallel Execution (New) | Speedup |
+|---|---|---|---|
+| **Simulation Batch** | 5 Runs x 1 Day | 5 Runs x 1 Day | — |
+| **Total Wall Time** | ~12.5 Minutes | **2.65 Minutes** | **~4.7x** |
+| **CPU Utilization** | 1 Core | 5 Cores | **500%** |
+| **Conflict Risk** | N/A | **Zero** (Isolated `runs/` trees) | Fixed |
+
+#### 📊 Smoke Test Results (5-Run Batch)
+
+| Run ID | Parameter Variation | Status | Duration |
+|---|---|---|---|
+| `Parallel_LAI_1` | LAI x 1.0 | ✅ SUCCESS | 2.58m |
+| `Parallel_LAI_2` | LAI x 1.5 | ✅ SUCCESS | 2.56m |
+| `Parallel_LAI_3` | LAI x 2.0 | ✅ SUCCESS | 2.55m |
+| `Parallel_LAI_4` | LAI x 2.5 | ✅ SUCCESS | 2.54m |
+| `Parallel_LAI_5` | LAI x 3.0 | ✅ SUCCESS | 2.54m |
+
+---
+
+### 🔍 Current Status & Open Issues
+
+**3-Engine validation (DE-STG, 2yr, SMC @ 60 cm vs observations, n = 17 543 hourly pairs):**
+
+| Engine | Build | r | KGE | RMSE [m³/m³] | Bias [m³/m³] |
+|:--|:--|---:|---:|---:|---:|
+| MATLAB R2025b | source + all fixes + soil props (Apr 22) | 0.857 | 0.718 | 0.060 | −0.049 |
+| MCR R2024a | compiled binary, license-free (May 15) | 0.843 | 0.696 | 0.055 | −0.043 |
+| Octave 11.1.0 | pre-`theta_r` baseline (Apr 20) | 0.832 | 0.684 | 0.061 | −0.045 |
+| Octave vs MATLAB | engine parity | 0.830 | 0.776 | 0.042 | −0.004 |
+| MCR vs MATLAB | binary fidelity | 0.951 | 0.849 | 0.021 | +0.006 |
+
+| Priority | Issue | Status |
+|---|---|---|
+| ✅ | Octave soil drainage / `KL_h` matrix corruption (nested-function scoping) | **Fixed Mar 13** — `calculateHydraulicConductivity.m` refactor |
+| ✅ | Energy balance Newton-Raphson divergence in Octave | **Fixed Mar 13** — `ebal.m` damping schedule + NaN guards |
+| ✅ | Precipitation handling | **Eliminated Feb 24** — zero-rain experiment |
+| ✅ | Multi-depth engine parity | **PASS** at 10, 20, 30, 60 cm (May 10, MATLAB↔Octave bias < 0.004 m³/m³ at every depth) |
+| ✅ | MATLAB NaN/complex cascade with site-specific Van Genuchten parameters | **Fixed Apr 22** — defensive guards in 5 files |
+| ✅ | Octave xlsx read on Windows (`unzip` missing from PATH) | **Fixed May 21** — pure-Octave `readXlsxNative.m` via `tar.exe` |
+| 🟡 | Octave dry-period collapse (SMC → 0 in Jul–Oct 2020) | `theta_r` floor guard added in `calculateTheta_LL.m`; 2yr rerun in progress |
+| 🟡 | MCR clean-machine validation (Windows box without MATLAB installed) | Manual step — binary attached to GitHub Release |
+
+</details>
