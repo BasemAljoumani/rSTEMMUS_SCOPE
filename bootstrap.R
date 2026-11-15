@@ -3,8 +3,8 @@
 # ============================================================================
 #
 # USAGE:
-#   1. git clone https://github.com/EcoExtreML/rSTEMMUS_SCOPE
-#   2. cd rSTEMMUS_SCOPE
+#   1. git clone https://github.com/ArmanShirzad/rSTEMMUS_SCOPE-public
+#   2. cd rSTEMMUS_SCOPE-public
 #   3. Rscript bootstrap.R
 #
 # What this does (in order):
@@ -13,8 +13,8 @@
 #     jsonlite, parallel, BiocManager)
 #   - Installs BioC package rhdf5
 #   - Loads the rSTEMMUS_SCOPE package code from the current directory
-#   - Calls initial_setup() if src/ or input/ is missing (downloads model
-#     source + input templates from the upstream release; a few hundred MB)
+#   - Calls initial_setup() if src/ or input/ is missing. In a clone this
+#     only extracts input.7z / runs.7z; src/ is used as checked out.
 #   - Runs verify_install() to report engine availability
 #   - Prints PASS / PARTIAL / FAIL with the exact next step
 #
@@ -32,8 +32,13 @@ cat(sprintf("R %s — OK\n", getRversion()))
 # 1. CRAN packages — `archive` is required for initial_setup() to extract
 #    input.7z / runs.7z; without it the unpacking silently fails and
 #    new_run() later crashes with "more 'from' files than 'to' files".
-cran_pkgs <- c("tidyverse", "lubridate", "devtools", "jsonlite",
-               "parallel", "BiocManager", "archive", "filesstrings")
+#    The package's own Imports are read from DESCRIPTION, because
+#    devtools::load_all() below refuses to run while any of them is missing.
+desc_imports <- strsplit(read.dcf("DESCRIPTION", fields = "Imports")[1, 1], ",")[[1]]
+desc_imports <- sub("[[:space:]]*\\(.*$", "", trimws(desc_imports))
+cran_pkgs <- unique(c("tidyverse", "lubridate", "devtools", "jsonlite",
+                      "parallel", "BiocManager", "archive", "filesstrings",
+                      setdiff(desc_imports, c("", "rhdf5"))))   # rhdf5 is BioC, step 2
 missing_cran <- cran_pkgs[!vapply(cran_pkgs,
                                   requireNamespace,
                                   logical(1),
@@ -65,8 +70,8 @@ patch_path <- paste0(getwd(), "/rSTEMMUS_SCOPE/")
 need_setup <- !dir.exists(paste0(patch_path, "src/")) ||
               !dir.exists(paste0(patch_path, "input/"))
 if (need_setup) {
-  cat("\nsrc/ or input/ missing — running initial_setup() to download\n")
-  cat("model source and input templates (a few hundred MB) ...\n\n")
+  cat("\nsrc/ or input/ missing — running initial_setup() to extract\n")
+  cat("input templates (and download the model tree if src/ is absent) ...\n\n")
   initial_setup(patch = patch_path)
 } else {
   cat("Model files present — skipping initial_setup()\n")
